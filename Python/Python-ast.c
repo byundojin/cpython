@@ -63,6 +63,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->Compare_type);
     Py_CLEAR(state->Constant_type);
     Py_CLEAR(state->Continue_type);
+    Py_CLEAR(state->Defer_type);
     Py_CLEAR(state->Del_singleton);
     Py_CLEAR(state->Del_type);
     Py_CLEAR(state->Delete_type);
@@ -541,6 +542,10 @@ static const char * const Nonlocal_fields[]={
 };
 static const char * const Expr_fields[]={
     "value",
+};
+static const char * const Defer_fields[]={
+    "args",
+    "body",
 };
 static const char * const expr_attributes[] = {
     "lineno",
@@ -2466,6 +2471,46 @@ add_ast_annotations(struct ast_state *state)
         return 0;
     }
     Py_DECREF(Continue_annotations);
+    PyObject *Defer_annotations = PyDict_New();
+    if (!Defer_annotations) return 0;
+    {
+        PyObject *type = state->arguments_type;
+        Py_INCREF(type);
+        cond = PyDict_SetItemString(Defer_annotations, "args", type) == 0;
+        Py_DECREF(type);
+        if (!cond) {
+            Py_DECREF(Defer_annotations);
+            return 0;
+        }
+    }
+    {
+        PyObject *type = state->stmt_type;
+        type = Py_GenericAlias((PyObject *)&PyList_Type, type);
+        cond = type != NULL;
+        if (!cond) {
+            Py_DECREF(Defer_annotations);
+            return 0;
+        }
+        cond = PyDict_SetItemString(Defer_annotations, "body", type) == 0;
+        Py_DECREF(type);
+        if (!cond) {
+            Py_DECREF(Defer_annotations);
+            return 0;
+        }
+    }
+    cond = PyObject_SetAttrString(state->Defer_type, "_field_types",
+                                  Defer_annotations) == 0;
+    if (!cond) {
+        Py_DECREF(Defer_annotations);
+        return 0;
+    }
+    cond = PyObject_SetAttrString(state->Defer_type, "__annotations__",
+                                  Defer_annotations) == 0;
+    if (!cond) {
+        Py_DECREF(Defer_annotations);
+        return 0;
+    }
+    Py_DECREF(Defer_annotations);
     PyObject *BoolOp_annotations = PyDict_New();
     if (!BoolOp_annotations) return 0;
     {
@@ -5606,7 +5651,8 @@ init_types(struct ast_state *state)
         "     | Expr(expr value)\n"
         "     | Pass\n"
         "     | Break\n"
-        "     | Continue");
+        "     | Continue\n"
+        "     | Defer(arguments args, stmt* body)");
     if (!state->stmt_type) return -1;
     if (add_attributes(state, state->stmt_type, stmt_attributes, 4) < 0) return
         -1;
@@ -5762,6 +5808,10 @@ init_types(struct ast_state *state)
                                      0,
         "Continue");
     if (!state->Continue_type) return -1;
+    state->Defer_type = make_type(state, "Defer", state->stmt_type,
+                                  Defer_fields, 2,
+        "Defer(arguments args, stmt* body)");
+    if (!state->Defer_type) return -1;
     state->expr_type = make_type(state, "expr", state->AST_type, NULL, 0,
         "expr = BoolOp(boolop op, expr* values)\n"
         "     | NamedExpr(expr target, expr value)\n"
@@ -7098,6 +7148,29 @@ _PyAST_Continue(int lineno, int col_offset, int end_lineno, int end_col_offset,
     if (!p)
         return NULL;
     p->kind = Continue_kind;
+    p->lineno = lineno;
+    p->col_offset = col_offset;
+    p->end_lineno = end_lineno;
+    p->end_col_offset = end_col_offset;
+    return p;
+}
+
+stmt_ty
+_PyAST_Defer(arguments_ty args, asdl_stmt_seq * body, int lineno, int
+             col_offset, int end_lineno, int end_col_offset, PyArena *arena)
+{
+    stmt_ty p;
+    if (!args) {
+        PyErr_SetString(PyExc_ValueError,
+                        "field 'args' is required for Defer");
+        return NULL;
+    }
+    p = (stmt_ty)_PyArena_Malloc(arena, sizeof(*p));
+    if (!p)
+        return NULL;
+    p->kind = Defer_kind;
+    p->v.Defer.args = args;
+    p->v.Defer.body = body;
     p->lineno = lineno;
     p->col_offset = col_offset;
     p->end_lineno = end_lineno;
@@ -8875,6 +8948,22 @@ ast2obj_stmt(struct ast_state *state, struct validator *vstate, void* _o)
         tp = (PyTypeObject *)state->Continue_type;
         result = PyType_GenericNew(tp, NULL, NULL);
         if (!result) goto failed;
+        break;
+    case Defer_kind:
+        tp = (PyTypeObject *)state->Defer_type;
+        result = PyType_GenericNew(tp, NULL, NULL);
+        if (!result) goto failed;
+        value = ast2obj_arguments(state, vstate, o->v.Defer.args);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->args, value) == -1)
+            goto failed;
+        Py_DECREF(value);
+        value = ast2obj_list(state, vstate, (asdl_seq*)o->v.Defer.body,
+                             ast2obj_stmt);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->body, value) == -1)
+            goto failed;
+        Py_DECREF(value);
         break;
     }
     value = ast2obj_int(state, vstate, o->lineno);
@@ -13132,6 +13221,75 @@ obj2ast_stmt(struct ast_state *state, PyObject* obj, stmt_ty* out, PyArena*
         if (*out == NULL) goto failed;
         return 0;
     }
+    tp = state->Defer_type;
+    isinstance = PyObject_IsInstance(obj, tp);
+    if (isinstance == -1) {
+        return -1;
+    }
+    if (isinstance) {
+        arguments_ty args;
+        asdl_stmt_seq* body;
+
+        if (PyObject_GetOptionalAttr(obj, state->args, &tmp) < 0) {
+            return -1;
+        }
+        if (tmp == NULL) {
+            PyErr_SetString(PyExc_TypeError, "required field \"args\" missing from Defer");
+            return -1;
+        }
+        else {
+            int res;
+            if (_Py_EnterRecursiveCall(" while traversing 'Defer' node")) {
+                goto failed;
+            }
+            res = obj2ast_arguments(state, tmp, &args, arena);
+            _Py_LeaveRecursiveCall();
+            if (res != 0) goto failed;
+            Py_CLEAR(tmp);
+        }
+        if (PyObject_GetOptionalAttr(obj, state->body, &tmp) < 0) {
+            return -1;
+        }
+        if (tmp == NULL) {
+            tmp = PyList_New(0);
+            if (tmp == NULL) {
+                return -1;
+            }
+        }
+        {
+            int res;
+            Py_ssize_t len;
+            Py_ssize_t i;
+            if (!PyList_Check(tmp)) {
+                PyErr_Format(PyExc_TypeError, "Defer field \"body\" must be a list, not a %.200s", _PyType_Name(Py_TYPE(tmp)));
+                goto failed;
+            }
+            len = PyList_GET_SIZE(tmp);
+            body = _Py_asdl_stmt_seq_new(len, arena);
+            if (body == NULL) goto failed;
+            for (i = 0; i < len; i++) {
+                stmt_ty val;
+                PyObject *tmp2 = Py_NewRef(PyList_GET_ITEM(tmp, i));
+                if (_Py_EnterRecursiveCall(" while traversing 'Defer' node")) {
+                    goto failed;
+                }
+                res = obj2ast_stmt(state, tmp2, &val, arena);
+                _Py_LeaveRecursiveCall();
+                Py_DECREF(tmp2);
+                if (res != 0) goto failed;
+                if (len != PyList_GET_SIZE(tmp)) {
+                    PyErr_SetString(PyExc_RuntimeError, "Defer field \"body\" changed size during iteration");
+                    goto failed;
+                }
+                asdl_seq_SET(body, i, val);
+            }
+            Py_CLEAR(tmp);
+        }
+        *out = _PyAST_Defer(args, body, lineno, col_offset, end_lineno,
+                            end_col_offset, arena);
+        if (*out == NULL) goto failed;
+        return 0;
+    }
 
     PyErr_Format(PyExc_TypeError, "expected some sort of stmt, but got %R", obj);
     failed:
@@ -17317,6 +17475,9 @@ astmodule_exec(PyObject *m)
         return -1;
     }
     if (PyModule_AddObjectRef(m, "Continue", state->Continue_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "Defer", state->Defer_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "expr", state->expr_type) < 0) {

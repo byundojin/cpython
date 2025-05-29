@@ -44,6 +44,7 @@ struct ast_state {
     PyObject *Compare_type;
     PyObject *Constant_type;
     PyObject *Continue_type;
+    PyObject *Defer_type;
     PyObject *Del_singleton;
     PyObject *Del_type;
     PyObject *Delete_type;

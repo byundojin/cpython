@@ -135,6 +135,8 @@ compound_stmt[stmt_ty]:
     | &'try' try_stmt
     | &'while' while_stmt
     | match_stmt
+# 수정
+    | &'defer' defer_stmt
 
 # SIMPLE STATEMENTS
 # =================
@@ -353,6 +355,26 @@ param_star_annotation[arg_ty]: a=NAME b=star_annotation { _PyAST_arg(a->v.Name.i
 annotation[expr_ty]: ':' a=expression { a }
 star_annotation[expr_ty]: ':' a=star_expression { a }
 default[expr_ty]: '=' a=expression { a } | invalid_default
+
+# Defer statement
+# -----------------
+
+# 수정
+defer_stmt[stmt_ty]:
+    | 'defer' a=[defer_params] ':' b=block { 
+        _PyAST_Defer((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
+
+defer_params[arguments_ty]:
+    | defer_parameters
+
+defer_parameters[arguments_ty]:
+    | a=defer_param_no_default+ { _PyPegen_make_arguments(p, NULL, NULL, a, NULL, NULL) }
+
+defer_param_no_default[arg_ty]:
+    | a=defer_param ',' { a }
+    | a=defer_param &':' { a }
+
+defer_param[arg_ty]: a=NAME { _PyAST_arg(a->v.Name.id, NULL, NULL, EXTRA) }
 
 # If statement
 # ------------

@@ -192,7 +192,7 @@ enum _stmt_kind {FunctionDef_kind=1, AsyncFunctionDef_kind=2, ClassDef_kind=3,
                   Raise_kind=17, Try_kind=18, TryStar_kind=19, Assert_kind=20,
                   Import_kind=21, ImportFrom_kind=22, Global_kind=23,
                   Nonlocal_kind=24, Expr_kind=25, Pass_kind=26, Break_kind=27,
-                  Continue_kind=28};
+                  Continue_kind=28, Defer_kind=29};
 struct _stmt {
     enum _stmt_kind kind;
     union {
@@ -348,6 +348,11 @@ struct _stmt {
         struct {
             expr_ty value;
         } Expr;
+
+        struct {
+            arguments_ty args;
+            asdl_stmt_seq *body;
+        } Defer;
 
     } v;
     int lineno;
@@ -770,6 +775,9 @@ stmt_ty _PyAST_Break(int lineno, int col_offset, int end_lineno, int
                      end_col_offset, PyArena *arena);
 stmt_ty _PyAST_Continue(int lineno, int col_offset, int end_lineno, int
                         end_col_offset, PyArena *arena);
+stmt_ty _PyAST_Defer(arguments_ty args, asdl_stmt_seq * body, int lineno, int
+                     col_offset, int end_lineno, int end_col_offset, PyArena
+                     *arena);
 expr_ty _PyAST_BoolOp(boolop_ty op, asdl_expr_seq * values, int lineno, int
                       col_offset, int end_lineno, int end_col_offset, PyArena
                       *arena);

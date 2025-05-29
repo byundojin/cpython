@@ -28,6 +28,7 @@ kwlist = [
     'class',
     'continue',
     'def',
+    'defer',
     'del',
     'elif',
     'else',

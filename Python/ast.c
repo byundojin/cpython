@@ -940,6 +940,11 @@ validate_stmt(struct validator *state, stmt_ty stmt)
     case Continue_kind:
         ret = 1;
         break;
+    // 수정
+    case Defer_kind:
+        ret = validate_body(state, stmt->v.Defer.body, "Defer") &&
+              validate_arguments(state, stmt->v.Defer.args);
+        break;
     // No default case so compiler emits warning for unhandled cases
     }
     if (ret < 0) {
