@@ -70,6 +70,10 @@ typedef struct _PyInterpreterFrame {
     int stacktop;  /* Offset of TOS from localsplus  */
     uint16_t return_offset;  /* Only relevant during a function call */
     char owner;
+
+    // 수정
+    PyObject *defer_stack; 
+
     /* Locals and stack */
     PyObject *localsplus[1];
 } _PyInterpreterFrame;

@@ -2465,6 +2465,69 @@
             DISPATCH();
         }
 
+        TARGET(DEFER_CLEAN) {
+            frame->instr_ptr = next_instr;
+            next_instr += 1;
+            INSTRUCTION_STATS(DEFER_CLEAN);
+            if (frame->defer_stack == NULL || !PyList_Check(frame->defer_stack)) {
+                goto end;
+            }
+            Py_ssize_t n = PyList_GET_SIZE(frame->defer_stack);
+            while (n > 0) {
+                n--;
+                PyObject *item = PyList_GET_ITEM(frame->defer_stack, n); // borrowed ref
+                if (!PyTuple_Check(item) || PyTuple_GET_SIZE(item) != 2) {
+                    continue;
+                }
+                PyObject *code = PyTuple_GET_ITEM(item, 0);
+                PyObject *arg_tuple = PyTuple_GET_ITEM(item, 1);
+                PyObject *func = PyFunction_New(code, frame->f_globals);
+                if (func == NULL){
+                    Py_DECREF(func);
+                    break;
+                }
+                // code(arg_tuple...) 실행
+                PyObject *result = PyObject_CallObject(func, arg_tuple);
+                Py_XDECREF(result); // 결과는 버림
+                Py_DECREF(func);
+                // 에러 무시하거나, 필요시 처리
+            }
+            Py_CLEAR(frame->defer_stack); // 다 끝나면 스택 비움
+            end:
+            DISPATCH();
+        }
+
+        TARGET(DEFER_PUSH) {
+            frame->instr_ptr = next_instr;
+            next_instr += 1;
+            INSTRUCTION_STATS(DEFER_PUSH);
+            PyObject *value2;
+            PyObject *value1;
+            value2 = stack_pointer[-1];
+            value1 = stack_pointer[-2];
+            if (frame->defer_stack == NULL) {
+                frame->defer_stack = PyList_New(0);
+                if (frame->defer_stack == NULL) {
+                    Py_DECREF(value1);
+                    Py_DECREF(value2);
+                    goto error;
+                }
+            }
+            // (code, arg_tuple) 튜플로 묶어서 defer_stack에 append
+            PyObject *item = PyTuple_Pack(2, value2, value1);
+            if (item == NULL || PyList_Append(frame->defer_stack, item) < 0) {
+                Py_XDECREF(item);
+                Py_DECREF(value1);
+                Py_DECREF(value2);
+                goto error;
+            }
+            Py_DECREF(item);
+            Py_DECREF(value1);
+            Py_DECREF(value2);
+            stack_pointer += -2;
+            DISPATCH();
+        }
+
         TARGET(DELETE_ATTR) {
             frame->instr_ptr = next_instr;
             next_instr += 1;

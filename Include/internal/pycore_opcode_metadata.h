@@ -165,6 +165,10 @@ int _PyOpcode_num_popped(int opcode, int oparg)  {
             return 1 + (oparg-1);
         case COPY_FREE_VARS:
             return 0;
+        case DEFER_CLEAN:
+            return 0;
+        case DEFER_PUSH:
+            return 2;
         case DELETE_ATTR:
             return 1;
         case DELETE_DEREF:
@@ -598,6 +602,10 @@ int _PyOpcode_num_pushed(int opcode, int oparg)  {
             return 2 + (oparg-1);
         case COPY_FREE_VARS:
             return 0;
+        case DEFER_CLEAN:
+            return 0;
+        case DEFER_PUSH:
+            return 0;
         case DELETE_ATTR:
             return 0;
         case DELETE_DEREF:
@@ -1028,6 +1036,8 @@ const struct opcode_metadata _PyOpcode_opcode_metadata[268] = {
     [CONVERT_VALUE] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_ERROR_FLAG },
     [COPY] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_PURE_FLAG },
     [COPY_FREE_VARS] = { true, INSTR_FMT_IB, HAS_ARG_FLAG },
+    [DEFER_CLEAN] = { true, INSTR_FMT_IX, HAS_ESCAPES_FLAG },
+    [DEFER_PUSH] = { true, INSTR_FMT_IX, HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG },
     [DELETE_ATTR] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_NAME_FLAG | HAS_ERROR_FLAG | HAS_ESCAPES_FLAG },
     [DELETE_DEREF] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_FREE_FLAG | HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG },
     [DELETE_FAST] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_LOCAL_FLAG | HAS_ERROR_FLAG | HAS_ESCAPES_FLAG },
@@ -1252,6 +1262,8 @@ _PyOpcode_macro_expansion[256] = {
     [CONVERT_VALUE] = { .nuops = 1, .uops = { { _CONVERT_VALUE, 0, 0 } } },
     [COPY] = { .nuops = 1, .uops = { { _COPY, 0, 0 } } },
     [COPY_FREE_VARS] = { .nuops = 1, .uops = { { _COPY_FREE_VARS, 0, 0 } } },
+    [DEFER_CLEAN] = { .nuops = 1, .uops = { { _DEFER_CLEAN, 0, 0 } } },
+    [DEFER_PUSH] = { .nuops = 1, .uops = { { _DEFER_PUSH, 0, 0 } } },
     [DELETE_ATTR] = { .nuops = 1, .uops = { { _DELETE_ATTR, 0, 0 } } },
     [DELETE_DEREF] = { .nuops = 1, .uops = { { _DELETE_DEREF, 0, 0 } } },
     [DELETE_FAST] = { .nuops = 1, .uops = { { _DELETE_FAST, 0, 0 } } },
@@ -1430,6 +1442,8 @@ const char *_PyOpcode_OpName[268] = {
     [CONVERT_VALUE] = "CONVERT_VALUE",
     [COPY] = "COPY",
     [COPY_FREE_VARS] = "COPY_FREE_VARS",
+    [DEFER_CLEAN] = "DEFER_CLEAN",
+    [DEFER_PUSH] = "DEFER_PUSH",
     [DELETE_ATTR] = "DELETE_ATTR",
     [DELETE_DEREF] = "DELETE_DEREF",
     [DELETE_FAST] = "DELETE_FAST",
@@ -1685,6 +1699,8 @@ const uint8_t _PyOpcode_Deopt[256] = {
     [CONVERT_VALUE] = CONVERT_VALUE,
     [COPY] = COPY,
     [COPY_FREE_VARS] = COPY_FREE_VARS,
+    [DEFER_CLEAN] = DEFER_CLEAN,
+    [DEFER_PUSH] = DEFER_PUSH,
     [DELETE_ATTR] = DELETE_ATTR,
     [DELETE_DEREF] = DELETE_DEREF,
     [DELETE_FAST] = DELETE_FAST,
@@ -1838,8 +1854,6 @@ const uint8_t _PyOpcode_Deopt[256] = {
 #endif // NEED_OPCODE_METADATA
 
 #define EXTRA_CASES \
-    case 119: \
-    case 120: \
     case 121: \
     case 122: \
     case 123: \

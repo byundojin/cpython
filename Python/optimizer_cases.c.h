@@ -3,6 +3,15 @@
 //   Python/optimizer_bytecodes.c
 // Do not edit!
 
+        case _DEFER_PUSH: {
+            stack_pointer += -2;
+            break;
+        }
+
+        case _DEFER_CLEAN: {
+            break;
+        }
+
         case _NOP: {
             break;
         }

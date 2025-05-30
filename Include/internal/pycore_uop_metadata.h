@@ -19,6 +19,8 @@ extern int _PyUop_num_popped(int opcode, int oparg);
 
 #ifdef NEED_OPCODE_METADATA
 const uint16_t _PyUop_Flags[MAX_UOP_ID+1] = {
+    [_DEFER_PUSH] = HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG,
+    [_DEFER_CLEAN] = HAS_ESCAPES_FLAG,
     [_NOP] = HAS_PURE_FLAG,
     [_RESUME_CHECK] = HAS_DEOPT_FLAG,
     [_LOAD_FAST_CHECK] = HAS_ARG_FLAG | HAS_LOCAL_FLAG | HAS_ERROR_FLAG | HAS_ESCAPES_FLAG,
@@ -334,6 +336,8 @@ const char *const _PyOpcode_uop_name[MAX_UOP_ID+1] = {
     [_CONVERT_VALUE] = "_CONVERT_VALUE",
     [_COPY] = "_COPY",
     [_COPY_FREE_VARS] = "_COPY_FREE_VARS",
+    [_DEFER_CLEAN] = "_DEFER_CLEAN",
+    [_DEFER_PUSH] = "_DEFER_PUSH",
     [_DELETE_ATTR] = "_DELETE_ATTR",
     [_DELETE_DEREF] = "_DELETE_DEREF",
     [_DELETE_FAST] = "_DELETE_FAST",
@@ -512,6 +516,10 @@ const char *const _PyOpcode_uop_name[MAX_UOP_ID+1] = {
 int _PyUop_num_popped(int opcode, int oparg)
 {
     switch(opcode) {
+        case _DEFER_PUSH:
+            return 2;
+        case _DEFER_CLEAN:
+            return 0;
         case _NOP:
             return 0;
         case _RESUME_CHECK:
